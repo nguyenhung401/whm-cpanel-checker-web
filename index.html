@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<title>WHM / cPanel Checker</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<style>
+body{
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 20px;
+    background: #f3f4f6;
+}
+
+.container{
+    max-width: 900px;
+    margin: auto;
+    background: white;
+    padding: 20px;
+    border-radius: 12px;
+    box-shadow: 0 3px 8px rgba(0,0,0,0.1);
+}
+
+h1{
+    text-align: center;
+    margin-bottom: 15px;
+    color: #2563eb;
+}
+
+textarea{
+    width: 100%;
+    height: 120px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    padding: 10px;
+    font-size: 14px;
+}
+
+button{
+    padding: 10px 16px;
+    margin-top: 10px;
+    background: #2563eb;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 15px;
+    cursor: pointer;
+}
+
+button:hover{
+    opacity: 0.8;
+}
+
+#resultsTable{
+    width: 100%;
+    margin-top: 20px;
+    border-collapse: collapse;
+}
+
+#resultsTable th, #resultsTable td{
+    padding: 8px;
+    border-bottom: 1px solid #ddd;
+}
+
+.status-ok{
+    color: green;
+    font-weight: bold;
+}
+
+.status-fail{
+    color: red;
+    font-weight: bold;
+}
+
+.upload-box{
+    margin-top: 10px;
+}
+
+.info{
+    margin-top: 10px;
+    font-weight: bold;
+}
+</style>
+</head>
+
+<body>
+<div class="container">
+    <h1>WHM / cPanel Checker</h1>
+
+    <div>
+        <label><b>Upload file .TXT:</b></label><br>
+        <input type="file" id="fileInput" accept=".txt" class="upload-box">
+    </div>
+    
+    <p><b>Hoặc dán nội dung TXT vào đây:</b></p>
+    <textarea id="textInput" placeholder="host.com:2083:user:pass"></textarea>
+
+    <button onclick="startScan()">🚀 Scan ngay</button>
+    <button onclick="downloadCSV()">📥 Tải kết quả CSV</button>
+
+    <div id="info" class="info"></div>
+
+    <table id="resultsTable">
+        <thead>
+            <tr>
+                <th>Host</th>
+                <th>Port</th>
+                <th>User</th>
+                <th>Loại</th>
+                <th>Trạng thái</th>
+                <th>Ghi chú</th>
+            </tr>
+        </thead>
+        <tbody id="resultsBody">
+        </tbody>
+    </table>
+</div>
+
+<script>
+
+// 🔥 API Render của bạn
+const API_URL = "https://whm-cpanel-checker.onrender.com/scan";
+
+async function readFile(file){
+    return new Promise((resolve)=>{
+        const reader = new FileReader();
+        reader.onload = (e)=>resolve(e.target.result);
+        reader.readAsText(file);
+    });
+}
+
+async function startScan(){
+    document.getElementById("info").textContent = "Đang xử lý...";
+    document.getElementById("resultsBody").innerHTML = "";
+
+    let text = document.getElementById("textInput").value.trim();
+
+    const file = document.getElementById("fileInput").files[0];
+    if(file){
+        text = await readFile(file);
+    }
+
+    if(!text){
+        alert("Vui lòng upload file hoặc nhập nội dung.");
+        return;
+    }
+
+    try{
+        const res = await fetch(API_URL, {
+            method: "POST",
+            headers: {"Content-Type":"application/json"},
+            body: JSON.stringify({text})
+        });
+
+        const data = await res.json();
+        renderResults(data.results);
+
+        document.getElementById("info").textContent = 
+            "Hoàn tất (" + data.results.length + " dòng)";
+        
+        window.scanResults = data.results;
+
+    }catch(err){
+        document.getElementById("info").textContent = "Lỗi API: " + err;
+    }
+}
+
+function renderResults(list){
+    const tbody = document.getElementById("resultsBody");
+    tbody.innerHTML = "";
+
+    for(let r of list){
+        let tr = document.createElement("tr");
+
+        tr.innerHTML = `
+            <td>${r.host || ""}</td>
+            <td>${r.port || ""}</td>
+            <td>${r.user || ""}</td>
+            <td>${r.type || ""}</td>
+            <td class="${r.status==="OK" ? "status-ok":"status-fail"}">${r.status}</td>
+            <td>${r.message || ""}</td>
+        `;
+
+        tbody.appendChild(tr);
+    }
+}
+
+function downloadCSV(){
+    if(!window.scanResults){
+        alert("Chưa có dữ liệu để tải CSV!");
+        return;
+    }
+
+    let csv = "host,port,user,type,status,message\n";
+    window.scanResults.forEach(r=>{
+        csv += `${r.host},${r.port},${r.user},${r.type},${r.status},${r.message}\n`;
+    });
+
+    const blob = new Blob([csv], {type:"text/csv"});
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "whm_cpanel_results.csv";
+    a.click();
+}
+
+</script>
+
+</body>
+</html>
